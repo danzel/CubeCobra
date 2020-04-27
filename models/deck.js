@@ -26,15 +26,15 @@ const SeatDeck = {
   bot: [String], //null bot value means human player
   userid: String,
   username: String,
-  pickorder: [cardSchema],
+  pickorder: [Number],
   name: String,
   description: {
     type: String,
     default: 'No description available.',
   },
   cols: Number,
-  deck: [[cardSchema]],
-  sideboard: [[cardSchema]],
+  deck: [[Number]],
+  sideboard: [[Number]],
 };
 
 // Deck schema
@@ -57,6 +57,7 @@ let deckSchema = mongoose.Schema({
     type: [SeatDeck],
     default: [],
   },
+  cards: [cardSchema],
 });
 
 deckSchema.index({

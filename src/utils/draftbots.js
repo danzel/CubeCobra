@@ -213,7 +213,16 @@ export const getFixingWeight = (pack, pick, initialState) => {
 };
 
 // inPack is the number of cards in this pack
-export const botRatingAndCombination = (card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) => {
+export const botRatingAndCombination = (
+  cards,
+  card,
+  picked,
+  seen,
+  synergies,
+  initialState,
+  inPack = 1,
+  packNum = 1,
+) => {
   // Find the color combination that gives us the highest score1
   // that'll be the color combination we want to play currently.
   const pickNum = initialState?.[0]?.[packNum - 1]?.length - inPack + 1;
@@ -222,7 +231,7 @@ export const botRatingAndCombination = (card, picked, seen, synergies, initialSt
   const weightedRatingScore = card ? getRating(card) * getRatingWeight(packNum, pickNum, initialState) : 0;
   for (const combination of COLOR_COMBINATIONS) {
     let rating = -Infinity;
-    if (card && (considerInCombination(combination, card) || isPlayableLand(combination, card))) {
+    if ((card || card === 0) && (considerInCombination(combination, card) || isPlayableLand(combination, card))) {
       rating =
         getColorScaling(combination) *
           (getPickSynergy(combination, card, picked, synergies) * getSynergyWeight(packNum, pickNum, initialState) +
