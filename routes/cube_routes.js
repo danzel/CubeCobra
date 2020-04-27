@@ -1225,6 +1225,14 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
     deck.comments = [];
     deck.cubename = cube.name;
     deck.cube = cube._id;
+    deck.cards = [];
+    const deckIndexes = added.map((row) =>
+      row.map((card) => {
+        delete card.details;
+        deck.cards.push(card);
+        return deck.cards.length - 1;
+      }),
+    );
     deck.seats = [
       {
         userid: req.user._id,
@@ -1232,7 +1240,7 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
         pickorder: [],
         name: `${req.user.username}'s decklist upload on ${deck.date.toLocaleString('en-US')}`,
         cols: 16,
-        deck: added,
+        deck: deckIndexes,
         sideboard: [],
       },
     ];
@@ -1722,6 +1730,7 @@ router.post('/startsealed/:id', body('packs').toInt({ min: 1, max: 16 }), body('
     deck.comments = [];
     deck.cubename = cube.name;
     deck.seats = [];
+    deck.cards = pool;
 
     deck.seats.push({
       userid: user._id,
@@ -1730,7 +1739,7 @@ router.post('/startsealed/:id', body('packs').toInt({ min: 1, max: 16 }), body('
       name: `Sealed from ${cube.name}`,
       description: '',
       cols: 16,
-      deck: pool,
+      deck: pool.map((_, index) => index),
       sideboard: [],
     });
 
@@ -1769,7 +1778,8 @@ router.get('/deck/download/xmage/:id/:seat', async (req, res) => {
     res.write(`NAME:${seat.name}\r\n`);
     const main = {};
     for (const col of seat.deck) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `[${details.set.toUpperCase()}:${details.collector_number}] ${details.name}`;
         if (main[name]) {
@@ -1785,7 +1795,8 @@ router.get('/deck/download/xmage/:id/:seat', async (req, res) => {
 
     const side = {};
     for (const col of seat.sideboard) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `[${details.set.toUpperCase()}:${details.collector_number}] ${details.name}`;
         if (side[name]) {
@@ -1817,7 +1828,8 @@ router.get('/deck/download/forge/:id/:seat', async (req, res) => {
     res.write('[Main]\r\n');
     const main = {};
     for (const col of seat.deck) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name}|${details.set.toUpperCase()}`;
         if (main[name]) {
@@ -1834,7 +1846,8 @@ router.get('/deck/download/forge/:id/:seat', async (req, res) => {
     res.write('[Side]\r\n');
     const side = {};
     for (const col of seat.sideboard) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name}|${details.set.toUpperCase()}`;
         if (side[name]) {
@@ -1863,7 +1876,8 @@ router.get('/deck/download/txt/:id/:seat', async (req, res) => {
     res.setHeader('Content-type', 'text/plain');
     res.charset = 'UTF-8';
     for (const col of seat.deck) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const { name } = carddb.cardFromId(card.cardID);
         res.write(`${name}\r\n`);
       }
@@ -1878,7 +1892,12 @@ router.get('/deck/download/mtgo/:id/:seat', async (req, res) => {
   try {
     const deck = await Deck.findById(req.params.id).lean();
     const seat = deck.seats[req.params.seat];
-    return exportToMtgo(res, seat.name, seat.deck.flat(), seat.sideboard.flat());
+    return exportToMtgo(
+      res,
+      seat.name,
+      seat.deck.flat().map((cardIndex) => deck.cards[cardIndex]),
+      seat.sideboard.flat().map((cardIndex) => deck.cards[cardIndex]),
+    );
   } catch (err) {
     return util.handleRouteError(req, res, err, '/404');
   }
@@ -1895,7 +1914,8 @@ router.get('/deck/download/arena/:id/:seat', async (req, res) => {
     res.write('Deck\r\n');
     const main = {};
     for (const col of seat.deck) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name} (${details.set.toUpperCase()}) ${details.collector_number}`;
         if (main[name]) {
@@ -1912,7 +1932,8 @@ router.get('/deck/download/arena/:id/:seat', async (req, res) => {
     res.write('\r\nSideboard\r\n');
     const side = {};
     for (const col of seat.sideboard) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name} (${details.set.toUpperCase()}) ${details.collector_number}`;
         if (side[name]) {
@@ -1942,7 +1963,8 @@ router.get('/deck/download/cockatrice/:id/:seat', async (req, res) => {
     res.charset = 'UTF-8';
     const main = {};
     for (const col of seat.deck) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name}`;
         if (main[name]) {
@@ -1959,7 +1981,8 @@ router.get('/deck/download/cockatrice/:id/:seat', async (req, res) => {
     res.write('Sideboard\r\n');
     const side = {};
     for (const col of seat.sideboard) {
-      for (const card of col) {
+      for (const cardIndex of col) {
+        const card = deck.cards[cardIndex];
         const details = carddb.cardFromId(card.cardID);
         const name = `${details.name}`;
         if (side[name]) {
@@ -2018,7 +2041,7 @@ router.post(
       const format = draftutil.getDraftFormat(params, cube);
 
       let draft = new Draft();
-      const populated = draftutil.createDraft(
+      const { initial_state: initialState, unopenedPacks, seats, cards } = draftutil.createDraft(
         format,
         cube.cards,
         bots,
@@ -2026,13 +2049,12 @@ router.post(
         req.user ? req.user : { username: 'Anonymous' },
       );
 
-      draft.initial_state = populated.initial_state;
-      draft.unopenedPacks = populated.unopenedPacks;
-      draft.seats = populated.seats;
+      draft.initial_state = initialState;
+      draft.unopenedPacks = unopenedPacks;
+      draft.seats = seats;
+      draft.cards = cards;
       draft.cube = cube._id;
       draft.basics = getBasics(carddb);
-
-      const cards = draft.initial_state.flat(3);
 
       const response = await fetch(`${process.env.FLASKROOT}/embeddings/`, {
         method: 'post',
@@ -2047,32 +2069,11 @@ router.post(
       await draft.save();
       if (req.body.botsOnly) {
         draft = await Draft.findById(draft._id).lean();
-        // insert card details everywhere that needs them
-        for (const seat of draft.unopenedPacks) {
-          for (const pack of seat) {
-            for (const card of pack) {
-              card.details = carddb.cardFromId(
-                card.cardID,
-                'cmc type image_normal parsed_cost image_flip name color_identity',
-              );
-            }
-          }
+        for (const card of draft.cards) {
+          card.details = carddb.cardFromId(card.cardID);
         }
-
-        for (const seat of draft.seats) {
-          for (const collection of [seat.drafted, seat.sideboard, seat.packbacklog]) {
-            for (const pack of collection) {
-              for (const card of pack) {
-                card.details = carddb.cardFromId(card.cardID);
-              }
-            }
-          }
-          for (const card of seat.pickorder) {
-            card.details = carddb.cardFromId(card.cardID);
-          }
-        }
-        for (const key of Object.keys(draft.basics)) {
-          draft.basics[key].details = carddb.cardFromId(draft.basics[key].cardID);
+        for (const card of Object.values(draft.basics)) {
+          card.details = carddb.cardFromId(card.cardID);
         }
         return res.status(200).send({
           success: 'true',
@@ -2107,26 +2108,8 @@ router.get('/draft/:id', async (req, res) => {
       return res.status(404).render('misc/404', {});
     }
 
-    // insert card details everywhere that needs them
-    for (const seat of draft.unopenedPacks) {
-      for (const pack of seat) {
-        for (const card of pack) {
-          card.details = carddb.cardFromId(card.cardID, 'cmc type image_normal image_flip name color_identity');
-        }
-      }
-    }
-
-    for (const seat of draft.seats) {
-      for (const collection of [seat.drafted, seat.sideboard, seat.packbacklog]) {
-        for (const pack of collection) {
-          for (const card of pack) {
-            card.details = carddb.cardFromId(card.cardID);
-          }
-        }
-      }
-      for (const card of seat.pickorder) {
-        card.details = carddb.cardFromId(card.cardID);
-      }
+    for (const card of draft.cards) {
+      card.details = carddb.cardFromId(card.cardID);
     }
     for (const key of Object.keys(draft.basics)) {
       draft.basics[key].details = carddb.cardFromId(draft.basics[key].cardID);
@@ -2773,7 +2756,6 @@ router.post('/editdeck/:id', ensureAuth, async (req, res) => {
     const newdeck = JSON.parse(req.body.draftraw);
     const name = JSON.parse(req.body.name);
     const description = sanitize(JSON.parse(req.body.description));
-
     deck.seats[0].deck = newdeck.playerdeck;
     deck.seats[0].sideboard = newdeck.playersideboard;
     deck.cols = newdeck.cols;
@@ -2803,6 +2785,7 @@ router.post('/submitdeck/:id', body('skipDeckbuilder').toBoolean(), async (req, 
     deck.draft = draft._id;
     deck.cubename = cube.name;
     deck.seats = [];
+    deck.cards = draft.cards;
 
     for (const seat of draft.seats) {
       deck.seats.push({
@@ -2980,6 +2963,7 @@ router.get('/rebuild/:id/:index', ensureAuth, async (req, res) => {
       deck: base.seats[req.params.index].deck,
       sideboard: base.seats[req.params.index].sideboard,
     });
+    deck.cards = base.cards;
     let botNumber = 1;
     for (let i = 0; i < base.seats.length; i++) {
       if (i !== parseInt(req.params.index, 10)) {
@@ -3072,6 +3056,7 @@ router.get('/redraft/:id', async (req, res) => {
     draft.initial_state = srcDraft.initial_state.slice();
     draft.unopenedPacks = srcDraft.initial_state.slice();
     draft.seats[0].bot = null;
+    draft.cards = srcDraft.cards;
 
     for (let i = 0; i < draft.seats.length; i += 1) {
       if (!draft.seats[i].bot) {
@@ -3210,17 +3195,8 @@ router.get('/deckbuilder/:id', async (req, res) => {
     }
 
     // add images to cards
-    for (const seat of deck.seats) {
-      for (const collection of [seat.deck, seat.sideboard]) {
-        for (const pack of collection) {
-          for (const card of pack) {
-            card.details = carddb.cardFromId(card.cardID);
-          }
-        }
-      }
-      for (const card of seat.pickorder) {
-        card.details = carddb.cardFromId(card.cardID);
-      }
+    for (const card of deck.cards) {
+      card.details = carddb.cardFromId(card.cardID);
     }
 
     const cube = await Cube.findOne(buildIdQuery(deck.cube), Cube.LAYOUT_FIELDS).lean();
@@ -3290,6 +3266,9 @@ router.get('/deck/:id', async (req, res) => {
           draft.synergies = null;
         }
       }
+      for (const card of draft.cards) {
+        card.details = carddb.cardFromId(card.cardID);
+      }
     }
 
     let drafter = 'Anonymous';
@@ -3300,19 +3279,8 @@ router.get('/deck/:id', async (req, res) => {
       drafter = deckUser.username;
     }
 
-    for (const seat of deck.seats) {
-      for (const collection of [seat.deck, seat.sideboard]) {
-        for (const pack of collection) {
-          for (const card of pack) {
-            card.details = carddb.cardFromId(card.cardID);
-          }
-        }
-      }
-      if (seat.pickorder) {
-        for (const card of seat.pickorder) {
-          card.details = carddb.cardFromId(card.cardID);
-        }
-      }
+    for (const card of deck.cards) {
+      card.details = carddb.cardFromId(card.cardID);
     }
 
     const reactProps = {

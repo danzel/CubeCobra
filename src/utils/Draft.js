@@ -2,7 +2,7 @@ import similarity from 'compute-cosine-similarity';
 
 import { csrfFetch } from 'utils/CSRF';
 import { arrayIsSubset, arrayShuffle, fromEntries } from 'utils/Util';
-import { COLOR_COMBINATIONS, cardColorIdentity, cardDevotion, cardType } from 'utils/Card';
+import { COLOR_COMBINATIONS, cardCmc, cardColorIdentity, cardDevotion, cardType } from 'utils/Card';
 
 import { getRating, getPickSynergy, botRatingAndCombination, considerInCombination, fetchLands } from 'utils/draftbots';
 
@@ -29,9 +29,13 @@ export function addSeen(seen, cards) {
 function init(newDraft) {
   draft = newDraft;
   for (const seat of draft.seats) {
+    const { cards } = draft;
     seat.seen = fromEntries(COLOR_COMBINATIONS.map((comb) => [comb.join(''), 0]));
     seat.seen.cards = [];
-    addSeen(seat.seen, seat.packbacklog[0].slice());
+    addSeen(
+      seat.seen,
+      seat.packbacklog[0].map((cardIndex) => cards[cardIndex]),
+    );
     seat.picked = fromEntries(COLOR_COMBINATIONS.map((comb) => [comb.join(''), 0]));
     seat.picked.cards = [];
   }
@@ -46,7 +50,7 @@ function cube() {
 }
 
 function pack() {
-  return draft.seats[0].packbacklog[0] || [];
+  return (draft.seats[0].packbacklog[0] || []).map((cardIndex) => draft.cards[cardIndex]);
 }
 
 function packPickNumber() {
@@ -65,21 +69,22 @@ function arrangePicks(picks) {
   if (!Array.isArray(picks) || picks.length !== 16) {
     throw new Error('Picks must be an array of length 16.');
   }
-
-  draft.seats[0].drafted = [...picks];
+  draft.seats[0].drafted = picks.map((pile) =>
+    pile.map((pileCard) => draft.cards.findIndex((card) => card.cardID === pileCard.cardID)),
+  );
 }
 
-const botRating = (card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) =>
-  botRatingAndCombination(card, picked, seen, synergies, initialState, inPack, packNum)[0];
-const botColors = (card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) =>
-  botRatingAndCombination(card, picked, seen, synergies, initialState, inPack, packNum)[1];
+const botRating = (cards, card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) =>
+  botRatingAndCombination(cards, card, picked, seen, synergies, initialState, inPack, packNum)[0];
+const botColors = (cards, card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) =>
+  botRatingAndCombination(cards, card, picked, seen, synergies, initialState, inPack, packNum)[1];
 
-function getSortFn(bot) {
+function getSortFn(bot, draftCards) {
   return (a, b) => {
     if (bot) {
-      return getRating(bot, b) - getRating(bot, a);
+      return getRating(bot, draftCards[b]) - getRating(bot, draftCards[a]);
     }
-    return b.rating - a.rating;
+    return draftCards[b].rating - draftCards[a].rating;
   };
 }
 
@@ -255,14 +260,14 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
   return bestNodes.map((ind) => nodes[ind]);
 };
 
-export async function buildDeck(cards, picked, synergies, initialState, basics) {
-  let nonlands = cards.filter((card) => !card.details.type.toLowerCase().includes('land'));
-  const lands = cards.filter((card) => card.details.type.toLowerCase().includes('land'));
+async function buildDeck(cards, cardIndices, picked, synergies, initialState, basics) {
+  let nonlands = cardIndices.filter((card) => !cardType(cards[card]).toLowerCase().includes('land'));
+  const lands = cardIndices.filter((card) => cardType(cards[card]).toLowerCase().includes('land'));
 
-  const colors = botColors(null, picked, null, null, synergies, initialState, 1, initialState[0].length);
-  const sortFn = getSortFn(colors);
-  const inColor = nonlands.filter((item) => considerInCombination(colors, item));
-  const outOfColor = nonlands.filter((item) => !considerInCombination(colors, item));
+  const colors = botColors(cards, null, picked, null, null, synergies, initialState, 1, initialState[0].length);
+  const sortFn = getSortFn(colors, cards);
+  const inColor = nonlands.filter((item) => considerInCombination(colors, cards[item]));
+  const outOfColor = nonlands.filter((item) => !considerInCombination(colors, cards[item]));
 
   lands.sort(sortFn);
   inColor.sort(sortFn);
@@ -278,7 +283,7 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
   let chosen = [];
   if (synergies) {
     const SEEDED = 23;
-    const distanceFunc = (c1, c2) => 1 - similarity(synergies[c1.index], synergies[c2.index]); // + (4800 - c1.rating - c2.rating) / 2400;
+    const distanceFunc = (c1, c2) => 1 - similarity(synergies[c1], synergies[c2]); // + (4800 - c1.rating - c2.rating) / 2400;
     // const distanceFunc = (c1, c2) => {
     //   const vec1 = synergies[c1.index];
     //   const vec2 = synergies[c2.index];
@@ -295,10 +300,11 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
         remaining -= floor;
         const kernel = findShortestKSpanningTree(nonlands, distanceFunc, floor);
         chosen = chosen.concat(kernel);
+        // eslint-disable-next-line no-loop-func
         nonlands = nonlands.filter((c) => !chosen.includes(c));
       }
     };
-    NKernels(5);
+    NKernels(3);
     const played = fromEntries(COLOR_COMBINATIONS.map((comb) => [comb.join(''), 0]));
     played.cards = chosen;
 
@@ -324,8 +330,8 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
     nonlands = nonlands.slice(23);
   }
 
-  const playableLands = lands.filter((land) => isPlayableLand(colors, land));
-  const unplayableLands = lands.filter((land) => !isPlayableLand(colors, land));
+  const playableLands = lands.filter((land) => isPlayableLand(colors, cards[land]));
+  const unplayableLands = lands.filter((land) => !isPlayableLand(colors, cards[land]));
 
   const main = chosen.concat(playableLands.slice(0, 17));
   side.push(...playableLands.slice(17));
@@ -333,10 +339,13 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
   side.push(...nonlands);
 
   if (basics) {
-    const basicsToAdd = calculateBasicCounts(main, colors);
+    const basicsToAdd = calculateBasicCounts(
+      main.map((ci) => cards[ci]),
+      colors,
+    );
     for (const [basic, count] of Object.entries(basicsToAdd)) {
       for (let i = 0; i < count; i++) {
-        main.push(basics[[basic]]);
+        main.push(cards.findIndex((c) => c.cardID === basics[[basic]].cardID));
       }
     }
   }
@@ -349,19 +358,20 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
     }
   }
 
-  for (const card of main) {
-    let index = Math.min(card.cmc ?? 0, 7);
+  for (const cardIndex of main) {
+    const card = cards[cardIndex];
+    let index = Math.min(cardCmc(card) ?? 0, 7);
     if (!card.details.type.toLowerCase().includes('creature') && !card.details.type.toLowerCase().includes('basic')) {
       index += 8;
     }
-    deck[index].push(card);
+    deck[index].push(cardIndex);
   }
 
   // sort the basic land col
   deck[0].sort((a, b) => a.details.name.localeCompare(b.details.name));
 
-  for (const card of side) {
-    sideboard[Math.min(card.cmc ?? 0, 7)].push(card);
+  for (const cardIndex of side) {
+    sideboard[Math.min(cardCmc(cards[cardIndex]) ?? 0, 7)].push(cardIndex);
   }
 
   return {
@@ -381,13 +391,13 @@ function botPicks() {
       bot,
     } = draft.seats[botIndex];
     if (packFrom.length > 0 && bot) {
-      const { initial_state, synergies } = draft;
+      const { cards, initial_state, synergies } = draft;
       let ratedPicks = [];
       const unratedPicks = [];
       const inPack = packFrom.length;
       const [packNum] = packPickNumber();
       for (let cardIndex = 0; cardIndex < packFrom.length; cardIndex++) {
-        if (packFrom[cardIndex].rating) {
+        if (cards[packFrom[cardIndex]].rating) {
           ratedPicks.push(cardIndex);
         } else {
           unratedPicks.push(cardIndex);
@@ -395,7 +405,7 @@ function botPicks() {
       }
       ratedPicks = ratedPicks
         .map((cardIndex) => [
-          botRating(packFrom[cardIndex], picked, seen, synergies, initial_state, inPack, packNum),
+          botRating(cards, packFrom[cardIndex], picked, seen, synergies, initial_state, inPack, packNum),
           cardIndex,
         ])
         .sort(([a], [b]) => b - a)
@@ -405,7 +415,7 @@ function botPicks() {
       const pickOrder = ratedPicks.concat(unratedPicks);
       const pickedCard = draft.seats[botIndex].packbacklog[0].splice(pickOrder[0], 1)[0];
       draft.seats[botIndex].pickorder.push(pickedCard);
-      addSeen(picked, [pickedCard]);
+      addSeen(picked, [cards[pickedCard]]);
     }
   }
 }
@@ -441,9 +451,13 @@ function passPack() {
       }
     }
   }
+  const { cards } = draft;
   for (const seat of draft.seats) {
     if (seat.packbacklog && seat.packbacklog.length > 0) {
-      addSeen(seat.seen, seat.packbacklog[0]);
+      addSeen(
+        seat.seen,
+        seat.packbacklog[0].map((cardIndex) => cards[cardIndex]),
+      );
     }
   }
 }
@@ -454,9 +468,10 @@ function sleep(ms) {
 
 async function pick(cardIndex) {
   await sleep(0);
-  const card = draft.seats[0].packbacklog[0].splice(cardIndex, 1)[0];
+  const ci = draft.seats[0].packbacklog[0].splice(cardIndex, 1)[0];
+  const card = draft.cards[ci];
   const packFrom = draft.seats[0].packbacklog[0];
-  draft.seats[0].pickorder.push(card);
+  draft.seats[0].pickorder.push(ci);
   passPack();
   const [packNum] = packPickNumber();
   csrfFetch(`/cube/api/draftpickcard/${draft.cube}`, {
@@ -464,8 +479,8 @@ async function pick(cardIndex) {
     body: JSON.stringify({
       draft_id: draft._id,
       pick: card.details.name,
-      pack: packFrom.map((c) => c.details.name),
       packNum,
+      pack: packFrom.map((c) => draft.cards[c].details.name),
     }),
     headers: {
       'Content-Type': 'application/json',
@@ -475,10 +490,13 @@ async function pick(cardIndex) {
 
 async function finish() {
   // build bot decks
-  const decksPromise = draft.seats.map((seat) => {
-    return seat.bot && buildDeck(seat.pickorder, seat.picked, draft.synergies, draft.initial_state, draft.basics);
-  });
+  const decksPromise = draft.seats.map(
+    (seat) =>
+      seat.bot &&
+      buildDeck(draft.cards, seat.pickorder, seat.picked, draft.synergies, draft.initial_state, draft.basics),
+  );
   const decks = await Promise.all(decksPromise);
+  const { cards } = draft;
 
   let botIndex = 1;
   for (let i = 0; i < draft.seats.length; i++) {
@@ -492,8 +510,12 @@ async function finish() {
     } else {
       const picked = fromEntries(COLOR_COMBINATIONS.map((comb) => [comb.join(''), 0]));
       picked.cards = [];
-      addSeen(picked, draft.seats[i].pickorder);
+      addSeen(
+        picked,
+        draft.seats[i].pickorder.map((cardIndex) => cards[cardIndex]),
+      );
       const colors = botColors(
+        draft.cards,
         null,
         picked,
         null,
@@ -508,26 +530,12 @@ async function finish() {
   }
 
   for (const seat of draft.seats) {
-    for (const category of [seat.drafted, seat.sideboard, seat.packbacklog]) {
-      for (const card of category) {
-        delete card.details;
-      }
-    }
-    for (const card of seat.pickorder) {
-      delete card.details;
-    }
     delete seat.seen;
     delete seat.picked;
   }
 
-  for (const category of [draft.initial_state, draft.unopenedPacks]) {
-    for (const seat of category) {
-      for (const col of seat) {
-        for (const card of col) {
-          delete card.details;
-        }
-      }
-    }
+  for (const card of draft.cards) {
+    delete card.details;
   }
 
   // save draft. if we fail, we fail

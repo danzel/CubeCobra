@@ -224,28 +224,38 @@ export const getColorScalingWeight = (pack, pick, initialState) => {
 };
 
 // inPack is the number of cards in this pack
-export const botRatingAndCombination = (card, picked, seen, synergies, initialState, inPack = 1, packNum = 1) => {
+export const botRatingAndCombination = (
+  cards,
+  card,
+  picked,
+  seen,
+  synergies,
+  initialState,
+  inPack = 1,
+  packNum = 1,
+) => {
   // Find the color combination that gives us the highest score1
   // that'll be the color combination we want to play currently.
   const pickNum = initialState?.[0]?.[packNum - 1]?.length - inPack + 1;
   let bestRating = -10000;
   let bestCombination = [];
   for (const combination of COLOR_COMBINATIONS) {
-    let rating = -100000;
-    if (card && combination.length > 0 && considerInCombination(combination, card)) {
+    let rating = -Infinity;
+    if ((card || card === 0) && combination.length > 0 && considerInCombination(combination, cards[card])) {
       rating =
-        getRating(combination, card, initialState) * getRatingWeight(packNum, pickNum, initialState) +
-        getPickSynergy(combination, card, picked, synergies) * getSynergyWeight(packNum, pickNum, initialState) +
+        getRating(combination, cards[card], initialState) * getRatingWeight(packNum, pickNum, initialState) +
+        getPickSynergy(combination, cards[card], picked, synergies) * getSynergyWeight(packNum, pickNum, initialState) +
         getInternalSynergy(combination, picked, synergies) * getSynergyWeight(packNum, pickNum, initialState) +
         getOpenness(combination, seen) * getOpennessWeight(packNum, pickNum, initialState) +
         getColor(combination, picked) * getColorWeight(packNum, pickNum, initialState) +
-        getFixing(combination, picked, card) * getFixingWeight(packNum, pickNum, initialState) +
+        getFixing(combination, picked, cards[card]) * getFixingWeight(packNum, pickNum, initialState) +
         getColorScaling(combination) * getColorScalingWeight(packNum, pickNum, initialState);
     } else if (!card) {
       rating = Math.log(
-        COLOR_SCALING_FACTOR[combination.length] *
+        COLOR_SCALING_FACTOR[combination.length] ** 2 *
           picked[combination.join('')] *
-          picked.cards.filter((card2) => considerInCombination(combination, card2)).length,
+          picked.cards.filter((card2) => considerInCombination(combination, card2)).length +
+          getInternalSynergy(combination, picked, synergies),
       );
     }
     if (rating > bestRating) {
