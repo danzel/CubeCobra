@@ -1281,8 +1281,6 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
       },
     );
 
-    console.log(JSON.stringify(deck));
-
     return res.redirect(`/cube/deckbuilder/${deck._id}`);
   } catch (err) {
     return util.handleRouteError(req, res, err, '/404');
@@ -3127,7 +3125,7 @@ router.get('/redraft/:id', async (req, res) => {
     const names = [];
     for (const seat of draft.initial_state) {
       for (const pack of seat) {
-        for (const card of pack) {
+        for (const card of pack.cards) {
           names.push(carddb.cardFromId(card.cardID).name);
         }
       }
@@ -3177,12 +3175,8 @@ router.post('/api/redraft/:id', async (req, res) => {
 
     // add ratings
     const names = [];
-    for (const seat of draft.initial_state) {
-      for (const pack of seat) {
-        for (const card of pack) {
-          names.push(carddb.cardFromId(card.cardID).name);
-        }
-      }
+    for (const card of draft.cards) {
+      names.push(carddb.cardFromId(card.cardID).name);
     }
 
     draft.ratings = await getElo(names);
@@ -3191,31 +3185,11 @@ router.post('/api/redraft/:id', async (req, res) => {
 
     draft = await Draft.findById(draft._id).lean();
     // insert card details everywhere that needs them
-    for (const seat of draft.unopenedPacks) {
-      for (const pack of seat) {
-        for (const card of pack) {
-          card.details = carddb.cardFromId(
-            card.cardID,
-            'cmc type image_normal parsed_cost image_flip name color_identity',
-          );
-        }
-      }
+    for (const card of draft.cards) {
+      card.details = carddb.cardFromId(card.cardID);
     }
-
-    for (const seat of draft.seats) {
-      for (const collection of [seat.drafted, seat.sideboard, seat.packbacklog]) {
-        for (const pack of collection) {
-          for (const card of pack) {
-            card.details = carddb.cardFromId(card.cardID);
-          }
-        }
-      }
-      for (const card of seat.pickorder) {
-        card.details = carddb.cardFromId(card.cardID);
-      }
-    }
-    for (const key of Object.keys(draft.basics)) {
-      draft.basics[key].details = carddb.cardFromId(draft.basics[key].cardID);
+    for (const card of Object.values(draft.basics)) {
+      card.details = carddb.cardFromId(card.cardID);
     }
     return res.status(200).send({
       success: 'true',

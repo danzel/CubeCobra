@@ -51,7 +51,7 @@ const interpolateWeight1d = (weights, pickNumPercent) => {
 
 const interpolateWeight2d = (weights, packNum, pickNum, initialState) => {
   const packNumPercent = (packNum - 1) / initialState[0].length;
-  const pickNumPercent = (pickNum - 1) / initialState[0][packNum - 1].length;
+  const pickNumPercent = (pickNum - 1) / initialState[0][packNum - 1].cards.length;
   const index = weights.length * packNumPercent;
   const ceilIndex = Math.ceil(index);
   const floorIndex = Math.floor(index);
@@ -117,7 +117,9 @@ export const getInternalSynergy = (combination, picked, synergies) => {
 
   let internalSynergy = 0;
   if (synergies) {
-    const pickedInCombo = picked.cards.filter((card2) => considerInCombination(combination, card2));
+    const pickedInCombo = picked.cards.filter(
+      (card2) => considerInCombination(combination, card2) && !cardType(card2).includes('Basic'),
+    );
     for (let i = 1; i < pickedInCombo.length; i++) {
       for (let j = 0; j < i; j++) {
         const similarityValue = similarity(synergies[pickedInCombo[i].index], synergies[pickedInCombo[j].index]);
@@ -139,7 +141,9 @@ export const getPickSynergy = (combination, card, picked, synergies) => {
 
   let synergy = 0;
   if (synergies && card) {
-    const pickedInCombo = picked.cards.filter((card2) => considerInCombination(combination, card2));
+    const pickedInCombo = picked.cards.filter(
+      (card2) => considerInCombination(combination, card2) && !cardType(card2).includes('Basic'),
+    );
     for (const { index } of pickedInCombo) {
       // Don't count synergy for duplicate cards.
       // Maximum synergy is generally around .997 which corresponds to ~1.
@@ -236,8 +240,8 @@ export const botRatingAndCombination = (
 ) => {
   // Find the color combination that gives us the highest score1
   // that'll be the color combination we want to play currently.
-  const pickNum = initialState?.[0]?.[packNum - 1]?.length - inPack + 1;
-  let bestRating = -10000;
+  const pickNum = initialState[0][packNum - 1].cards.length - inPack + 1;
+  let bestRating = -Infinity;
   let bestCombination = [];
   for (const combination of COLOR_COMBINATIONS) {
     let rating = -Infinity;
