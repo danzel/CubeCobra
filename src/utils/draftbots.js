@@ -189,7 +189,7 @@ export const getColor = (combination, picked) => {
 
 const getCoordPairs = (pack, pick, initialState) => [
   [pack - 1, initialState[0].length],
-  [pick - 1, initialState[0][0].length],
+  [pick - 1, initialState[0][0].cards.length],
 ];
 
 export const getRatingWeight = (pack, pick, initialState) => {
@@ -225,7 +225,7 @@ export const botRatingAndCombination = (
 ) => {
   // Find the color combination that gives us the highest score1
   // that'll be the color combination we want to play currently.
-  const pickNum = initialState?.[0]?.[packNum - 1]?.length - inPack + 1;
+  const pickNum = initialState[0][packNum - 1].cards.length - inPack + 1;
   let bestRating = -Infinity;
   let bestCombination = [];
   const weightedRatingScore = card ? getRating(card) * getRatingWeight(packNum, pickNum, initialState) : 0;
