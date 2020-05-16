@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 
 import {
+  Button,
   Card,
   CardBody,
   CardHeader,
@@ -113,6 +114,7 @@ const CubeDraftPage = ({ cube, cubeID, initialDraft }) => {
   const [packNumber, setPackNumber] = useState(initialPackNumber);
   const [pickNumber, setPickNumber] = useState(initialPickNumber);
   const [showBotBreakdown, toggleShowBotBreakdown] = useToggle(false);
+  const [sealed, setSealed] = useState(Draft.sealed());
 
   // Picks is an array with 1st key C/NC, 2d key CMC, 3d key order
   const [picks, setPicks] = useState([new Array(8).fill([]), new Array(8).fill([])]);
@@ -133,6 +135,7 @@ const CubeDraftPage = ({ cube, cubeID, initialDraft }) => {
     setPicks(newPicks);
     Draft.arrangePicks([].concat(newPicks[0], newPicks[1]));
 
+    setSealed(Draft.sealed());
     let newPack = Draft.pack();
     if (!Array.isArray(newPack) || newPack.length === 0) {
       // should only happen when draft is over.
@@ -200,8 +203,20 @@ const CubeDraftPage = ({ cube, cubeID, initialDraft }) => {
 
   const picked = createSeen();
   addSeen(picked, getPicked(0));
-  console.log(getPicked(0));
   const seen = getSeen(0);
+
+  const nextPack = useCallback(() => {
+    let newPicks = picks;
+    for (const card of pack) {
+      const typeLine = (card.type_line || card.details.type).toLowerCase();
+      const row = typeLine.includes('creature') ? 0 : 1;
+      const col = cmcColumn(card);
+      const colIndex = picks[row][col].length;
+      newPicks = DeckStacks.moveOrAddCard(newPicks, [row, col, colIndex], card);
+    }
+    Draft.nextPack();
+    update(newPicks);
+  }, [pack, picks, update]);
   return (
     <CubeLayout cube={cube} cubeID={cubeID} activeLink="playtest">
       <DisplayContextProvider>
@@ -228,16 +243,23 @@ const CubeDraftPage = ({ cube, cubeID, initialDraft }) => {
         </CSRFForm>
         <DndProvider>
           {showPack(initialDraft, packNumber) && (
-            <ErrorBoundary>
-              <Pack
-                pack={pack}
-                packNumber={packNumber}
-                pickNumber={pickNumber}
-                picking={picking}
-                onMoveCard={handleMoveCard}
-                onClickCard={handleClickCard}
-              />
-            </ErrorBoundary>
+            <>
+              <ErrorBoundary>
+                <Pack
+                  pack={pack}
+                  packNumber={packNumber}
+                  pickNumber={pickNumber}
+                  picking={picking}
+                  onMoveCard={sealed ? () => {} : handleMoveCard}
+                  onClickCard={sealed ? () => {} : handleClickCard}
+                />
+              </ErrorBoundary>
+              {sealed && (
+                <Button color="primary" onClick={nextPack}>
+                  Next Pack
+                </Button>
+              )}
+            </>
           )}
           {showBotBreakdown && (
             <ErrorBoundary>
@@ -263,7 +285,7 @@ const CubeDraftPage = ({ cube, cubeID, initialDraft }) => {
               <DeckStacks
                 cards={picks}
                 title="Picks"
-                subtitle={subtitle(picks.flat().flat())}
+                subtitle={subtitle(picks.flat(2))}
                 locationType={Location.PICKS}
                 canDrop={canDrop}
                 onMoveCard={handleMoveCard}
