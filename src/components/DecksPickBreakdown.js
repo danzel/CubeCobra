@@ -60,7 +60,7 @@ const DecksPickBreakdown = ({ draft, seatIndex, deck, defaultIndex }) => {
 
   for (let i = start + picks; i < end; i += 1) {
     cardsInPack.push(deck.cards[deck.seats[current].pickorder[i]]);
-    if (!draft.initial_state[0][pack].sealed) {
+    if (!draft.initial_state[0][pack].sealed && (i + 1) % draft.initial_state[0][pack].pickAtTime === 0) {
       if (pack % 2 !== draft.initial_state[0].length % 2) {
         current += 1;
         current %= draft.initial_state.length;
@@ -131,7 +131,14 @@ const DecksPickBreakdown = ({ draft, seatIndex, deck, defaultIndex }) => {
 DecksPickBreakdown.propTypes = {
   draft: PropTypes.shape({
     initial_state: PropTypes.arrayOf(
-      PropTypes.arrayOf(PropTypes.shape({ cards: PropTypes.array, sealed: PropTypes.bool, trash: PropTypes.number })),
+      PropTypes.arrayOf(
+        PropTypes.shape({
+          cards: PropTypes.arrayOf(PropTypes.number).isRequired,
+          pickAtTime: PropTypes.number.isRequired,
+          sealed: PropTypes.bool,
+          trash: PropTypes.number.isRequired,
+        }),
+      ),
     ).isRequired,
     cards: PropTypes.arrayOf(PropTypes.shape({ cardID: PropTypes.string })).isRequired,
   }).isRequired,
