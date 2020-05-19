@@ -31,6 +31,7 @@ const COLORS = [
   ['Black', 'B', 'Swamp'],
   ['Red', 'R', 'Mountain'],
   ['Green', 'G', 'Forest'],
+  ['Colorless', 'C', 'Wastes'],
 ];
 const MAX_BASICS = 20;
 
