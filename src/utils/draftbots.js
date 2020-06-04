@@ -177,7 +177,7 @@ const basics = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'];
 // Does this help us fix for this combination of colors?
 // Scale from 0-1. Perfect is double-on-color fetch.
 export const getFixing = (combination, _, card) => {
-  const colors = fetchLands[card.details.name] ?? cardColorIdentity(card);
+  const colors = fetchLands[cardName(card)] ?? cardColorIdentity(card);
   const typeLine = cardType(card);
   const isLand = typeLine.indexOf('Land') > -1;
   const isFetch = !!fetchLands[cardName(card)];

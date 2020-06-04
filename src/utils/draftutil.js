@@ -288,7 +288,7 @@ export function createDraft(format, cards, bots, seats, user, seed = false) {
         index += 1;
         const card = { ...draft.initial_state[i][j][k], index: draft.cards.length };
         delete card.details;
-        draft.cards.push(card)
+        draft.cards.push(card);
         draft.unopenedPacks[i][j].push(card.index);
         draft.initial_state[i][j][k] = card.index;
       }

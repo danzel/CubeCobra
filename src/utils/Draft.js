@@ -2,7 +2,7 @@ import similarity from 'compute-cosine-similarity';
 
 import { csrfFetch } from 'utils/CSRF';
 import { arrayIsSubset, arrayShuffle, fromEntries } from 'utils/Util';
-import { COLOR_COMBINATIONS, cardCmc, cardColorIdentity, cardDevotion, cardType } from 'utils/Card';
+import { COLOR_COMBINATIONS, cardCmc, cardColorIdentity, cardDevotion, cardName, cardType } from 'utils/Card';
 
 import { getRating, getPickSynergy, botRatingAndCombination, considerInCombination, fetchLands } from 'utils/draftbots';
 
@@ -88,7 +88,7 @@ function getSortFn(bot, draftCards) {
   };
 }
 
-export const calculateBasicCounts = (main, colors) => {
+export const calculateBasicCounts = (cards, main, colors) => {
   // add up colors
   const symbols = {
     W: 0,
@@ -98,9 +98,9 @@ export const calculateBasicCounts = (main, colors) => {
     G: 0,
   };
 
-  for (const card of main) {
+  for (const cardIndex of main) {
     for (const symbol of ['W', 'U', 'B', 'R', 'G']) {
-      symbols[symbol] += cardDevotion(card, symbol) ?? 0;
+      symbols[symbol] += cardDevotion(cards[cardIndex], symbol) ?? 0;
     }
   }
   const colorWeights = Object.values(symbols);
@@ -116,7 +116,9 @@ export const calculateBasicCounts = (main, colors) => {
     R: 'Mountain',
     G: 'Forest',
   };
-  const desiredLength = Math.floor((40 * main.filter((c) => !cardType(c).toLowerCase().includes('land')).length) / 23);
+  const desiredLength = Math.floor(
+    (40 * main.filter((ci) => !cardType(cards[ci]).toLowerCase().includes('land')).length) / 23,
+  );
   const toAdd = desiredLength - main.length;
   let added = 0;
   for (const [symbol, weight] of Object.entries(symbols)) {
@@ -132,7 +134,7 @@ export const calculateBasicCounts = (main, colors) => {
 
 const isPlayableLand = (colors, card) =>
   considerInCombination(colors, card) ||
-  (fetchLands[card.details.name] && fetchLands[card.details.name].some((c) => colors.includes(c)));
+  (fetchLands[cardName(card)] && fetchLands[cardName(card)].some((c) => colors.includes(c)));
 
 const allPairsShortestPath = (distances) => {
   const result = [];
@@ -260,7 +262,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
   return bestNodes.map((ind) => nodes[ind]);
 };
 
-async function buildDeck(cards, cardIndices, picked, synergies, initialState, basics) {
+export async function buildDeck(cards, cardIndices, picked, synergies, initialState, basics) {
   let nonlands = cardIndices.filter((card) => !cardType(cards[card]).toLowerCase().includes('land'));
   const lands = cardIndices.filter((card) => cardType(cards[card]).toLowerCase().includes('land'));
 
@@ -312,7 +314,9 @@ async function buildDeck(cards, cardIndices, picked, synergies, initialState, ba
     for (let i = 0; i < size; i++) {
       // add in new synergy data
       const scores = [];
-      scores.push(nonlands.map((card) => getPickSynergy(colors, card, played, synergies) + getRating(colors, card)));
+      scores.push(
+        nonlands.map((card) => getPickSynergy(colors, cards[card], played, synergies) + getRating(colors, cards[card])),
+      );
 
       let best = 0;
 
@@ -323,6 +327,7 @@ async function buildDeck(cards, cardIndices, picked, synergies, initialState, ba
       }
       const current = nonlands.splice(best, 1)[0];
       addSeen(played, [current]);
+      chosen.push(current);
     }
     nonlands = nonlands.filter((c) => !chosen.includes(c));
   } else {
@@ -339,10 +344,7 @@ async function buildDeck(cards, cardIndices, picked, synergies, initialState, ba
   side.push(...nonlands);
 
   if (basics) {
-    const basicsToAdd = calculateBasicCounts(
-      main.map((ci) => cards[ci]),
-      colors,
-    );
+    const basicsToAdd = calculateBasicCounts(cards, main, colors);
     for (const [basic, count] of Object.entries(basicsToAdd)) {
       for (let i = 0; i < count; i++) {
         main.push(cards.findIndex((c) => c.cardID === basics[[basic]].cardID));
@@ -368,7 +370,7 @@ async function buildDeck(cards, cardIndices, picked, synergies, initialState, ba
   }
 
   // sort the basic land col
-  deck[0].sort((a, b) => a.details.name.localeCompare(b.details.name));
+  deck[0].sort((a, b) => cardName(cards[a]).localeCompare(cardName(cards[b])));
 
   for (const cardIndex of side) {
     sideboard[Math.min(cardCmc(cards[cardIndex]) ?? 0, 7)].push(cardIndex);
@@ -518,7 +520,6 @@ async function finish() {
         draft.cards,
         null,
         picked,
-        null,
         null,
         draft.synergies,
         draft.initial_state,
