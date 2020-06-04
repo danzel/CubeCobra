@@ -46,7 +46,7 @@ export const getPackAsSeen = (initialState, index, deck, seatIndex) => {
   }
 
   for (let i = start + picks; i < end; i += 1) {
-    cardsInPack.push(deck.seats[current].pickorder[i]);
+    cardsInPack.push(deck.cards[deck.seats[current].pickorder[i]]);
     if (pack % 2 !== initialState[0].length % 2) {
       current += 1;
       current %= initialState.length;
@@ -64,7 +64,7 @@ export const getPackAsSeen = (initialState, index, deck, seatIndex) => {
   let ind = 0;
   let added = 0;
   for (const list of initialState[0]) {
-    picksList.push(seat.pickorder.slice(added, added + list.length).map((c) => ({ ...c })));
+    picksList.push(seat.pickorder.slice(added, added + list.length).map((ci) => ({ ...deck.cards[ci] })));
     added += list.length;
   }
   for (const list of picksList) {
@@ -147,7 +147,8 @@ export const Internal = ({ cardsInPack, draft, pack, picks, picked, seen }) => {
   for (const card of cardsInPack) {
     card.scores = [];
     const [score, combination] = botRatingAndCombination(
-      card,
+      draft.cards,
+      draft.cards.findIndex((c) => c.cardID === card.cardID),
       picked,
       seen,
       draft.synergies,
@@ -265,6 +266,7 @@ Internal.propTypes = {
   draft: PropTypes.shape({
     initial_state: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.array)).isRequired,
     synergies: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number.isRequired).isRequired).isRequired,
+    cards: PropTypes.arrayOf(PropTypes.shape({ cardID: PropTypes.string })).isRequired,
   }).isRequired,
   pack: PropTypes.number.isRequired,
   picks: PropTypes.number.isRequired,
@@ -368,6 +370,7 @@ DraftbotBreakdown.propTypes = {
     ).isRequired,
     cube: PropTypes.string.isRequired,
     comments: PropTypes.arrayOf(PropTypes.object).isRequired,
+    cards: PropTypes.arrayOf(PropTypes.shape({ cardID: PropTypes.string.isRequired })).isRequired,
   }).isRequired,
   seatIndex: PropTypes.string.isRequired,
   defaultIndex: PropTypes.number,

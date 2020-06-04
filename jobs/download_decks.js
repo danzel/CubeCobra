@@ -46,9 +46,7 @@ const processDeck = (deck) => {
     console.log('Started');
     const count = await Deck.countDocuments();
     console.log(`Counted ${count} documents`);
-    const cursor = Deck.find()
-      .lean()
-      .cursor();
+    const cursor = Deck.find().lean().cursor();
 
     for (let i = 0; i < count; i += batchSize) {
       const decks = [];

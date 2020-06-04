@@ -132,7 +132,7 @@ export const getPickSynergy = (combination, card, picked, synergies) => {
 // Scale from 0-10. Perfect is five-color land in 5 color combination.
 // Used to select a card within a color combination.
 export const getFixing = (combination, card) => {
-  const colors = fetchLands[card.details.name] ?? cardColorIdentity(card);
+  const colors = fetchLands[cardName(card)] ?? cardColorIdentity(card);
   const typeLine = cardType(card);
   const isLand = typeLine.includes('Land');
   const isFetch = !!fetchLands[cardName(card)];
@@ -231,14 +231,18 @@ export const botRatingAndCombination = (
   const weightedRatingScore = card ? getRating(card) * getRatingWeight(packNum, pickNum, initialState) : 0;
   for (const combination of COLOR_COMBINATIONS) {
     let rating = -Infinity;
-    if ((card || card === 0) && (considerInCombination(combination, card) || isPlayableLand(combination, card))) {
+    if (
+      (card || card === 0) &&
+      (considerInCombination(combination, cards[card]) || isPlayableLand(combination, cards[card]))
+    ) {
       rating =
         getColorScaling(combination) *
-          (getPickSynergy(combination, card, picked, synergies) * getSynergyWeight(packNum, pickNum, initialState) +
+          (getPickSynergy(combination, cards[card], picked, synergies) *
+            getSynergyWeight(packNum, pickNum, initialState) +
             getInternalSynergy(combination, picked) * getSynergyWeight(packNum, pickNum, initialState) +
             getOpenness(combination, seen) * getOpennessWeight(packNum, pickNum, initialState) +
             getColor(combination, picked) * getColorWeight(packNum, pickNum, initialState)) +
-        getFixing(combination, card) * getFixingWeight(packNum, pickNum, initialState);
+        getFixing(combination, cards[card]) * getFixingWeight(packNum, pickNum, initialState);
     } else if (!card) {
       const count = picked.cards[combination.join('')].filter((c) => !cardType(c).toLowerCase().includes('land'))
         .length;

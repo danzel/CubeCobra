@@ -33,7 +33,7 @@ const COLORS = [
 ];
 const MAX_BASICS = 20;
 
-const BasicsModal = ({ isOpen, toggle, addBasics, deck, draft }) => {
+const BasicsModal = ({ isOpen, toggle, addBasics, deck, draft, cards }) => {
   const refs = {};
   for (const [, , basic] of COLORS) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -53,9 +53,10 @@ const BasicsModal = ({ isOpen, toggle, addBasics, deck, draft }) => {
     const main = deck.flat(2);
     init(draft);
     const picked = createSeen();
-    addSeen(picked, main, draft.synergies);
-    const { colors } = await buildDeck(main, picked, draft.synergies, draft.initial_state, null);
-    const basics = calculateBasicCounts(main, colors);
+    const mainIndices = main.map((c) => cards.findIndex((c2) => c.cardID === c2.cardID));
+    addSeen(picked, main);
+    const { colors } = await buildDeck(cards, mainIndices, picked, draft.synergies, draft.initial_state, null);
+    const basics = calculateBasicCounts(cards, mainIndices, colors);
     for (const [basic, count] of Object.entries(basics)) {
       const opts = refs[basic].current.options;
       for (let i = 0; i < opts.length; i++) {
@@ -64,7 +65,7 @@ const BasicsModal = ({ isOpen, toggle, addBasics, deck, draft }) => {
         }
       }
     }
-  }, [refs, deck, draft]);
+  }, [refs, cards, deck, draft]);
 
   return (
     <Modal isOpen={isOpen} toggle={toggle} size="sm">
@@ -108,9 +109,10 @@ BasicsModal.propTypes = {
   toggle: PropTypes.func.isRequired,
   addBasics: PropTypes.func.isRequired,
   draft: PropTypes.shape({
-    initial_state: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.shape({})))).isRequired,
+    initial_state: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number.isRequired))).isRequired,
     synergies: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number)),
   }).isRequired,
+  cards: PropTypes.arrayOf(PropTypes.shape({ cardID: PropTypes.string.isRequired })).isRequired,
   deck: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.shape({}))).isRequired,
 };
 
@@ -121,6 +123,7 @@ const DeckbuilderNavbar = ({
   description,
   className,
   draft,
+  cards,
   setSideboard,
   setDeck,
   ...props
@@ -190,17 +193,21 @@ const DeckbuilderNavbar = ({
     const main = deck.playerdeck.flat(2).concat(deck.playersideboard.flat());
     init(draft);
     const picked = createSeen();
-    addSeen(picked, main, draft.synergies);
+    const mainIndices = main.map((c) => cards.findIndex((c2) => c.cardID === c2.cardID));
+    addSeen(picked, main);
     const { sideboard: side, deck: newDeck } = await buildDeck(
-      main,
+      cards,
+      mainIndices,
       picked,
       draft.synergies,
       draft.initial_state,
       draft.basics,
     );
-    setSideboard([side]);
-    setDeck([newDeck.slice(0, 8), newDeck.slice(8, 16)]);
-  }, [deck, draft, setDeck, setSideboard]);
+    const actualDeck = newDeck.map((stack) => stack.map((ci) => cards[ci]));
+    const actualSide = side.map((stack) => stack.map((ci) => cards[ci]));
+    setSideboard([actualSide]);
+    setDeck([actualDeck.slice(0, 8), actualDeck.slice(8, 16)]);
+  }, [cards, deck, draft, setDeck, setSideboard]);
 
   return (
     <Navbar expand="md" light className={`usercontrols ${className}`} {...props}>
@@ -233,6 +240,7 @@ const DeckbuilderNavbar = ({
               addBasics={addBasics}
               draft={draft}
               deck={deck.playerdeck}
+              cards={cards}
             />
           </NavItem>
           <NavItem>
@@ -260,12 +268,13 @@ DeckbuilderNavbar.propTypes = {
   description: PropTypes.string.isRequired,
   className: PropTypes.string,
   draft: PropTypes.shape({
-    initial_state: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.shape({})))).isRequired,
+    initial_state: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number))).isRequired,
     synergies: PropTypes.arrayOf(PropTypes.arrayOf(PropTypes.number)),
     basics: PropTypes.shape({}),
   }).isRequired,
   setDeck: PropTypes.func.isRequired,
   setSideboard: PropTypes.func.isRequired,
+  cards: PropTypes.arrayOf(PropTypes.shape({ cardID: PropTypes.string.isRequired })).isRequired,
 };
 
 DeckbuilderNavbar.defaultProps = {
