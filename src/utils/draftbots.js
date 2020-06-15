@@ -1,5 +1,6 @@
-import { arrayIsSubset } from 'utils/Util';
 import similarity from 'compute-cosine-similarity';
+
+import { arrayIsSubset } from 'utils/Util';
 import { COLOR_COMBINATIONS, cardColorIdentity, cardName, cardType } from 'utils/Card';
 
 // We want to discourage playing more colors so they get less
