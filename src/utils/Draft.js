@@ -243,7 +243,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
           throw new Error('Not enough nodes to make a K-set.');
         }
       }
-      const length = distance + closestI[iInd][0] + closestJ[jInd][0];
+      const length = distance + (iInd >= 0 ? closestI[iInd][0] : 0) + (jInd >= 0 ? closestJ[jInd][0] : 0);
       if (length < bestDistance) {
         bestNodes = seen;
         bestDistance = length;
@@ -273,11 +273,10 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
     side = [...outOfColor];
   }
 
-  let chosen;
+  let chosen = [];
   if (synergies) {
-    const KERNEL = Math.min(nonlands.length, 23);
-    const distanceFunc = (c1, c2) =>
-      1 - similarity(synergies[c1.index], synergies[c2.index]); // + (4800 - c1.rating - c2.rating) / 2400;
+    const SEEDED = 23;
+    const distanceFunc = (c1, c2) => 1 - similarity(synergies[c1.index], synergies[c2.index]); // + (4800 - c1.rating - c2.rating) / 2400;
     // const distanceFunc = (c1, c2) => {
     //   const vec1 = synergies[c1.index];
     //   const vec2 = synergies[c2.index];
@@ -287,12 +286,21 @@ export async function buildDeck(cards, picked, synergies, initialState, basics) 
     //   }
     //   return Math.sqrt(sum) + 24000 / (c1.rating + c2.rating);
     // };
-    chosen = findShortestKSpanningTree(nonlands, distanceFunc, KERNEL);
-    nonlands = nonlands.filter((c) => !chosen.includes(c));
+    const NKernels = (n) => {
+      let remaining = Math.min(SEEDED, nonlands.length);
+      for (let i = 0; i < n; i++) {
+        const floor = Math.floor(remaining / (n - i));
+        remaining -= floor;
+        const kernel = findShortestKSpanningTree(nonlands, distanceFunc, floor);
+        chosen = chosen.concat(kernel);
+        nonlands = nonlands.filter((c) => !chosen.includes(c));
+      }
+    };
+    NKernels(5);
     const played = fromEntries(COLOR_COMBINATIONS.map((comb) => [comb.join(''), 0]));
     played.cards = chosen;
 
-    const size = Math.min(23 - KERNEL, nonlands.length);
+    const size = Math.min(23 - chosen.length, nonlands.length);
     for (let i = 0; i < size; i++) {
       // add in new synergy data
       const scores = [];

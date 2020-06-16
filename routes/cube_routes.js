@@ -1177,13 +1177,16 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
     for (let i = 0; i < 16; i += 1) {
       added.push([]);
     }
-
     for (let i = 0; i < cards.length; i += 1) {
       const item = cards[i].toLowerCase().trim();
-      if (/([0-9]+x )(.*)/.test(item)) {
-        const count = parseInt(item.substring(0, item.indexOf('x')), 10);
+      const numericMatch = item.match(/([0-9]+)x? (.*)/);
+      if (numericMatch) {
+        let count = parseInt(numericMatch[1], 10);
+        if (!Number.isInteger(count)) {
+          count = 1;
+        }
         for (let j = 0; j < count; j += 1) {
-          cards.push(item.substring(item.indexOf('x') + 1));
+          cards.push(numericMatch[2]);
         }
       } else {
         let selected = null;
@@ -1217,7 +1220,6 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
         }
       }
     }
-
     const deck = new Deck();
     deck.date = Date.now();
     deck.comments = [];
@@ -1234,7 +1236,31 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
         sideboard: [],
       },
     ];
-
+    let index = 0;
+    const populatedCards = [];
+    for (const stack of deck.seats[0].deck) {
+      for (const card of stack) {
+        card.index = index;
+        populatedCards.push(card);
+        index += 1;
+      }
+    }
+    const draft = new Draft();
+    draft.initial_state = [[populatedCards]];
+    const response = await fetch(`${process.env.FLASKROOT}/embeddings/`, {
+      method: 'post',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        cards: populatedCards.map((card) => carddb.cardFromId(card.cardID).name_lower),
+      }),
+    });
+    if (response.ok) {
+      draft.synergies = await response.json();
+    } else {
+      draft.synergies = null;
+    }
+    await draft.save();
+    deck.draft = draft._id;
     await deck.save();
     await Cube.updateOne(
       {
@@ -1246,6 +1272,8 @@ router.post('/uploaddecklist/:id', ensureAuth, async (req, res) => {
         },
       },
     );
+
+    console.log(JSON.stringify(deck));
 
     return res.redirect(`/cube/deckbuilder/${deck._id}`);
   } catch (err) {
@@ -3172,7 +3200,7 @@ router.get('/deckbuilder/:id', async (req, res) => {
       req.flash('danger', 'Deck not found');
       return res.status(404).render('misc/404', {});
     }
-    const draft = await Draft.findById(deck.draft);
+    const draft = deck.draft ? await Draft.findById(deck.draft) : null;
 
     const deckOwner = await User.findById(deck.seats[0].userid).lean();
 
