@@ -56,6 +56,7 @@
     "css-loader": "^3.4.2",
     "csurf": "^1.10.0",
     "dotenv": "^8.2.0",
+    "elastic-apm-node": "^3.3.0",
     "event-stream": "^4.0.1",
     "express": "^4.17.1",
     "express-fileupload": "^1.1.6",
@@ -112,6 +113,7 @@
     "webpack-node-externals": "^1.7.2",
     "winston": "git://github.com/winstonjs/winston.git#80d343939facdab4eb4aa315cb061c75a3f77549",
     "winston-cloudwatch": "^2.3.2",
+    "winston-elasticsearch": "0.8.8",
     "winston-loggly-bulk": "^3.1.0"
   },
   "devDependencies": {

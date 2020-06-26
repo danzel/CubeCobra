@@ -1,6 +1,16 @@
 // Load Environment Variables
 require('dotenv').config();
 
+// eslint-disable-next-line no-unused-vars
+let apm;
+if (process.env.APM_SERVER_URL) {
+  apm = require('elastic-apm-node').start({
+    serverUrl: process.env.APM_SERVER_URL,
+    serviceName: 'Cube Cobra',
+  });
+  console.log('Initialized APM', apm);
+}
+
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
@@ -41,46 +51,86 @@ const linearFormat = winston.format((info) => {
   return info;
 });
 
-const consoleFormat = winston.format.combine(linearFormat(), winston.format.simple());
-
+const textFormat = winston.format.combine(linearFormat(), winston.format.simple());
+const consoleFormat = winston.format.combine(linearFormat(), timestampedFormat(), winston.format.simple());
+const transports = [];
 if (process.env.ENV === 'production') {
-  winston.configure({
-    level: 'info',
-    format: winston.format.json(),
-    exitOnError: false,
-    transports: [
-      new WinstonCloudWatch({
-        level: 'info',
-        cloudWatchLogs: new AWS.CloudWatchLogs(),
-        logGroupName: `${process.env.AWS_LOG_GROUP}_${process.env.AWS_LOG_STREAM}_info`,
-        logStreamName: uuid(),
-        awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
-        awsRegion: process.env.AWS_REGION,
-        retentionInDays: parseInt(process.env.LOG_RETENTION_DAYS, 10),
-        messageFormatter: formatInfo,
-      }),
-      new WinstonCloudWatch({
-        level: 'error',
-        cloudWatchLogs: new AWS.CloudWatchLogs(),
-        logGroupName: `${process.env.AWS_LOG_GROUP}_${process.env.AWS_LOG_STREAM}_error`,
-        logStreamName: uuid(),
-        awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
-        awsRegion: process.env.AWS_REGION,
-        retentionInDays: parseInt(process.env.LOG_RETENTION_DAYS, 10),
-        messageFormatter: formatError,
-      }),
-    ],
-  });
+  transports.push(
+    new WinstonCloudWatch({
+      level: 'info',
+      cloudWatchLogs: new AWS.CloudWatchLogs(),
+      logGroupName: `${process.env.AWS_LOG_GROUP}_${process.env.AWS_LOG_STREAM}_info`,
+      logStreamName: uuid(),
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
+      awsRegion: process.env.AWS_REGION,
+      retentionInDays: parseInt(process.env.LOG_RETENTION_DAYS, 10),
+      messageFormatter: formatInfo,
+    }),
+    new WinstonCloudWatch({
+      level: 'error',
+      cloudWatchLogs: new AWS.CloudWatchLogs(),
+      logGroupName: `${process.env.AWS_LOG_GROUP}_${process.env.AWS_LOG_STREAM}_error`,
+      logStreamName: uuid(),
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY,
+      awsRegion: process.env.AWS_REGION,
+      retentionInDays: parseInt(process.env.LOG_RETENTION_DAYS, 10),
+      messageFormatter: formatError,
+    }),
+  );
 } else {
-  winston.configure({
-    level: 'info',
-    format: winston.format.json(),
-    exitOnError: false,
-    transports: [new winston.transports.Console({ format: consoleFormat })],
-  });
+  transports.push(
+    // - Write to all logs with level `info` and below to `combined.log`
+    // - Write all logs error (and below) to `error.log`.
+    new winston.transports.File({ filename: errorFile.name, level: 'error', format: textFormat }),
+    new winston.transports.File({ filename: combinedFile.name, format: textFormat }),
+    new winston.transports.Console({ format: consoleFormat }),
+  );
 }
+if (process.env.ELASTICSEARCH_URL) {
+  const { ElasticsearchTransport } = require('winston-elasticsearch');
+  const transportOptions = {
+    level: 'info',
+    indexPrefix: 'cubecobra',
+    ensureMappingTemplate: true,
+    mappingTemplate: {
+      index_patterns: ['cubecobra-*'],
+      settings: {
+        number_of_shards: 1,
+        number_of_replicas: 0,
+        index: {
+          refresh_interval: '5s',
+        },
+      },
+      mappings: {
+        _source: { enabled: true },
+        properties: {
+          '@timestamp': { type: 'date' },
+          '@version': { type: 'keyword' },
+          message: { type: 'text', index: true },
+          severity: { type: 'keyword', index: true },
+          fields: {
+            dynamic: true,
+            properties: {},
+          },
+        },
+      },
+    },
+    clientOpts: { node: process.env.ELASTICSEARCH_URL },
+  };
+  if (apm) {
+    transportOptions.apm = apm;
+  }
+  transports.push(new ElasticsearchTransport(transportOptions));
+}
+
+winston.configure({
+  level: 'info',
+  format: winston.format.json(),
+  exitOnError: false,
+  transports,
+});
 
 // Connect db
 mongoose.connect(process.env.MONGODB_URL, {
@@ -262,7 +312,7 @@ schedule.scheduleJob('0 10 * * *', () => {
 
 // Start serer after carddb is initialized.
 carddb.initializeCardDb().then(() => {
-  http.createServer(app).listen(process.env.PORT || 5000, '127.0.0.1', () => {
+  http.createServer(app).listen(process.env.PORT || 5000, process.env.LISTEN_ADDR || '127.0.0.1', () => {
     winston.info(`Server started on port ${process.env.PORT || 5000}...`);
   });
 });
