@@ -235,8 +235,8 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
     }
   }
   const distances = allPairsShortestPath(distancesPre);
+  // Sort nodes by distance so we can find the i-closest for i < k.
   for (let i = 0; i < nodes.length; i++) {
-    // We could do this faster with Quick-Select if we need the speedup
     closest.push(
       distances[i]
         .map((distance, ind) => [distance, ind])
@@ -248,7 +248,10 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
   // Contains distance, amount from left to take, left index, and right index
   let bestDistance = Infinity;
   let bestNodes = [];
+  // We're looping over every possible center for the spanning tree which likely
+  // lies in the middle of an edge, not at a point.
   for (let i = 1; i < nodes.length; i++) {
+    // Check the case where this node is the center.
     if (bestDistance > closest[i][k - 2] + closest[i][k - 3]) {
       bestDistance = closest[i][k - 2] + closest[i][k - 3];
       bestNodes = closest[i].slice(0, k - 1).concat([i]);
@@ -262,6 +265,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
       let jInd = -1;
       let included = 2;
       while (included < k) {
+        // The edge must be the center so the weights here have to stay close to each other
         if (
           (iInd >= 0 ? closestI[iInd][0] : 0) + distance < (jInd >= 0 ? closestJ[jInd][0] : 0) &&
           iInd < closestI.length - 1
@@ -272,6 +276,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
             included += 1;
             seen.push(ind);
           }
+          // Same here
         } else if (
           (jInd >= 0 ? closestJ[jInd][0] : 0) + distance < (iInd >= 0 ? closestI[iInd][0] : 0) &&
           jInd < closestJ.length - 1
@@ -282,9 +287,12 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
             included += 1;
             seen.push(ind);
           }
+          // the next j is closer than the next i. This is technically incorrect since you
+          // could have a cluster just slightly farther away on the i side but it should be
+          // close enough for our purposes
         } else if (
           jInd < closestJ.length - 1 &&
-          (jInd >= 0 ? closestJ[jInd + 1][0] : 0) < (iInd >= 0 ? closestI[iInd][0] : 0)
+          (jInd >= 0 ? closestJ[jInd + 1][0] : 0) < (iInd >= 0 ? closestI[iInd + 1][0] : 0)
         ) {
           jInd += 1;
           const [, ind] = closestJ[jInd];
@@ -292,6 +300,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
             included += 1;
             seen.push(ind);
           }
+          // Either there are no more j's or the next i is closer than the next j
         } else if (iInd < closestI.length - 1) {
           iInd += 1;
           const [, ind] = closestI[iInd];
@@ -299,6 +308,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
             included += 1;
             seen.push(ind);
           }
+          // no more i's so we'll try to add a j, this can only happen when there aren't k nodes.
         } else if (jInd < closestJ.length - 1) {
           jInd += 1;
           const [, ind] = closestJ[jInd];
@@ -306,6 +316,7 @@ const findShortestKSpanningTree = (nodes, distanceFunc, k) => {
             included += 1;
             seen.push(ind);
           }
+          // no more nodes
         } else {
           throw new Error('Not enough nodes to make a K-set.');
         }
@@ -347,6 +358,7 @@ export async function buildDeck(cards, cardIndices, picked, synergies, initialSt
 
   let chosen = [];
   if (synergies) {
+    // 1 - synergy since we are measuring distance instead of closeness.
     const distanceFunc = (c1, c2) => 1 - similarity(synergies[c1], synergies[c2]); // + (4800 - c1.rating - c2.rating) / 2400;
     // const distanceFunc = (c1, c2) => {
     //   const vec1 = synergies[c1];
@@ -371,20 +383,30 @@ export async function buildDeck(cards, cardIndices, picked, synergies, initialSt
     NKernels(2, 18);
     const played = createSeen();
     addSeen(played, chosen);
-
     const size = Math.min(23 - chosen.length, nonlands.length);
     for (let i = 0; i < size; i++) {
       // add in new synergy data
+<<<<<<< HEAD
       const scores = [];
       scores.push(
         nonlands.map((card) => getPickSynergy(colors, cards[card], played, synergies) + getRating(colors, cards[card])),
       );
 
+||||||| 9d581e19
+      const scores = [];
+      scores.push(nonlands.map((card) => getPickSynergy(colors, card, played, synergies) + getRating(colors, card)));
+
+=======
+>>>>>>> fix-spanning-tree
       let best = 0;
+      let bestScore = -Infinity;
 
       for (let j = 1; j < nonlands.length; j++) {
-        if (scores[j] > scores[best]) {
+        const card = nonlands[j];
+        const score = getPickSynergy(colors, card, played, synergies) + getRating(colors, card);
+        if (score > bestScore) {
           best = j;
+          bestScore = score;
         }
       }
       const current = nonlands.splice(best, 1)[0];
